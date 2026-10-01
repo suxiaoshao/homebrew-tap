@@ -47,7 +47,7 @@ jobs:
           abort 'Expected a published stable release' if release['draft'] || release['prerelease'] || !release['published_at']
           abort 'Invalid release tag' unless tag.match?(/\Av\d+\.\d+\.\d+\z/)
           version = tag.delete_prefix('v')
-          current = File.read('Casks/g/gupi.rb')[/^  version "(\d+\.\d+\.\d+)"$/, 1]
+          current = File.exist?('Casks/g/gupi.rb') ? File.read('Casks/g/gupi.rb')[/^  version "(\d+\.\d+\.\d+)"$/, 1] : '0.0.0'
           abort 'Cannot read current Cask version' unless current
           changed = Gem::Version.new(version) > Gem::Version.new(current)
           File.open(ENV.fetch('GITHUB_OUTPUT'), 'a') do |file|
@@ -69,6 +69,7 @@ jobs:
           gh release download "$RELEASE_TAG" --repo github.com/suxiaoshao/gupi --pattern "$archive" --dir "$RUNNER_TEMP"
           tar -xOf "$RUNNER_TEMP/$archive" homebrew/Casks/g/gupi.rb > "$RUNNER_TEMP/gupi.rb"
           ruby -e 'abort "Cask version mismatch" unless File.read(ARGV[0])[/^  version "([^"]+)"$/, 1] == ENV.fetch("RELEASE_VERSION")' "$RUNNER_TEMP/gupi.rb"
+          mkdir -p Casks/g
           cp "$RUNNER_TEMP/gupi.rb" Casks/g/gupi.rb
       - name: Validate the update before proposing it
         if: steps.release.outputs.changed == 'true'
@@ -76,6 +77,7 @@ jobs:
           HOMEBREW_GITHUB_API_TOKEN: ${{ github.token }}
         run: |
           brew tap suxiaoshao/tap "$GITHUB_WORKSPACE"
+          mkdir -p "$(brew --repository suxiaoshao/tap)/Casks/g"
           cp Casks/g/gupi.rb "$(brew --repository suxiaoshao/tap)/Casks/g/gupi.rb"
           brew style --cask suxiaoshao/tap/gupi
           brew audit --cask --online suxiaoshao/tap/gupi

@@ -22,6 +22,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Validate generated Cask
+        if: hashFiles('Casks/g/gupi.rb') != ''
         run: |
           brew tap suxiaoshao/tap "$GITHUB_WORKSPACE"
           brew style --cask suxiaoshao/tap/gupi
