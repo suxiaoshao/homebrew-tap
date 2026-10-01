@@ -76,6 +76,8 @@ jobs:
         env:
           HOMEBREW_GITHUB_API_TOKEN: ${{ github.token }}
         run: |
+          brew update
+          brew --version
           brew tap suxiaoshao/tap "$GITHUB_WORKSPACE"
           mkdir -p "$(brew --repository suxiaoshao/tap)/Casks/g"
           cp Casks/g/gupi.rb "$(brew --repository suxiaoshao/tap)/Casks/g/gupi.rb"

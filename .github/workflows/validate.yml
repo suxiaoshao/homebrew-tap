@@ -24,6 +24,8 @@ jobs:
       - name: Validate generated Cask
         if: hashFiles('Casks/g/gupi.rb') != ''
         run: |
+          brew update
+          brew --version
           brew tap suxiaoshao/tap "$GITHUB_WORKSPACE"
           brew style --cask suxiaoshao/tap/gupi
           brew audit --cask --online suxiaoshao/tap/gupi
