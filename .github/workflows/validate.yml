@@ -1,0 +1,28 @@
+name: Validate Cask
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: macos-26
+    timeout-minutes: 20
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: '1'
+      HOMEBREW_NO_ANALYTICS: '1'
+      HOMEBREW_GITHUB_API_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Validate generated Cask
+        run: |
+          brew tap suxiaoshao/tap "$GITHUB_WORKSPACE"
+          brew style --cask suxiaoshao/tap/gupi
+          brew audit --cask --online suxiaoshao/tap/gupi

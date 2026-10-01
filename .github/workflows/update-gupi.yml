@@ -1,0 +1,117 @@
+name: Update Gupi
+
+on:
+  schedule:
+    - cron: '17 */6 * * *'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Public stable tag (empty selects the latest release)
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: update-gupi
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: macos-26
+    timeout-minutes: 20
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: '1'
+      HOMEBREW_NO_ANALYTICS: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Select a newer public stable release
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUESTED_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          endpoint=repos/suxiaoshao/gupi/releases/latest
+          if [[ -n "$REQUESTED_TAG" ]]; then
+            [[ "$REQUESTED_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || exit 1
+            endpoint="repos/suxiaoshao/gupi/releases/tags/$REQUESTED_TAG"
+          fi
+          gh api "$endpoint" > "$RUNNER_TEMP/release.json"
+          ruby -rjson -rrubygems <<'RUBY'
+          release = JSON.parse(File.read(File.join(ENV.fetch('RUNNER_TEMP'), 'release.json')))
+          tag = release.fetch('tag_name')
+          abort 'Expected a published stable release' if release['draft'] || release['prerelease'] || !release['published_at']
+          abort 'Invalid release tag' unless tag.match?(/\Av\d+\.\d+\.\d+\z/)
+          version = tag.delete_prefix('v')
+          current = File.read('Casks/g/gupi.rb')[/^  version "(\d+\.\d+\.\d+)"$/, 1]
+          abort 'Cannot read current Cask version' unless current
+          changed = Gem::Version.new(version) > Gem::Version.new(current)
+          File.open(ENV.fetch('GITHUB_OUTPUT'), 'a') do |file|
+            file.puts "changed=#{changed}"
+            file.puts "tag=#{tag}"
+            file.puts "version=#{version}"
+          end
+          puts(changed ? "Preparing #{tag}" : 'Cask already current; no downgrade or duplicate PR')
+          RUBY
+      - name: Download the matching generated Cask
+        if: steps.release.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          set -euo pipefail
+          archive="Gupi_${RELEASE_VERSION}_distribution.tar.gz"
+          gh release download "$RELEASE_TAG" --repo github.com/suxiaoshao/gupi --pattern "$archive" --dir "$RUNNER_TEMP"
+          tar -xOf "$RUNNER_TEMP/$archive" homebrew/Casks/g/gupi.rb > "$RUNNER_TEMP/gupi.rb"
+          ruby -e 'abort "Cask version mismatch" unless File.read(ARGV[0])[/^  version "([^"]+)"$/, 1] == ENV.fetch("RELEASE_VERSION")' "$RUNNER_TEMP/gupi.rb"
+          cp "$RUNNER_TEMP/gupi.rb" Casks/g/gupi.rb
+      - name: Validate the update before proposing it
+        if: steps.release.outputs.changed == 'true'
+        env:
+          HOMEBREW_GITHUB_API_TOKEN: ${{ github.token }}
+        run: |
+          brew tap suxiaoshao/tap "$GITHUB_WORKSPACE"
+          cp Casks/g/gupi.rb "$(brew --repository suxiaoshao/tap)/Casks/g/gupi.rb"
+          brew style --cask suxiaoshao/tap/gupi
+          brew audit --cask --online suxiaoshao/tap/gupi
+      - name: Open or reuse an update PR
+        if: steps.release.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          set -euo pipefail
+          branch="codex/gupi-${RELEASE_VERSION}"
+          existing=$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$branch" --state all --json url --jq '.[0].url // empty')
+          if [[ -n "$existing" ]]; then
+            printf 'Existing proposal (no duplicate): %s\n' "$existing"
+            exit 0
+          fi
+          gh auth setup-git
+          if git ls-remote --exit-code --heads origin "$branch" > /dev/null; then
+            git fetch origin "$branch"
+            git show FETCH_HEAD:Casks/g/gupi.rb > "$RUNNER_TEMP/existing-gupi.rb"
+            cmp "$RUNNER_TEMP/existing-gupi.rb" Casks/g/gupi.rb
+          else
+            git switch -c "$branch"
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git add Casks/g/gupi.rb
+            git commit -m "gupi ${RELEASE_VERSION}"
+            git push origin "HEAD:refs/heads/$branch"
+          fi
+          cat > "$RUNNER_TEMP/pr-body.md" <<EOF
+          Update Gupi to ${RELEASE_TAG} using the Cask from its public release metadata.
+
+          Homebrew style and online audit passed before this PR was created.
+
+          Release: https://github.com/suxiaoshao/gupi/releases/tag/${RELEASE_TAG}
+          Validation: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
+          EOF
+          gh pr create --repo "$GITHUB_REPOSITORY" --base main --head "$branch" --title "gupi ${RELEASE_VERSION}" --body-file "$RUNNER_TEMP/pr-body.md"
