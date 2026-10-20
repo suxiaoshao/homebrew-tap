@@ -1,9 +1,9 @@
 cask "gupi" do
   arch arm: "aarch64", intel: "x86_64"
 
-  version "0.1.6"
-  sha256 arm:   "45a536eed928133449da19c61d16491def07e377029ef1a67d124d31073c9b0f",
-         intel: "2ae268d7af42c3f99d8d3559cf93e0b723dbb1de26149c015c5bbadd6ffec050"
+  version "0.1.7"
+  sha256 arm:   "48c69a0bcddf8abbf8b4693c933a77b9208d65341da268693bffbe0a90b4e2c9",
+         intel: "2f25be2914ac1b11454ef937efe6b7e13655401a531b1422efea9a0c72e04ac0"
 
   url "https://github.com/suxiaoshao/gupi/releases/download/v#{version}/Gupi_#{version}_#{arch}_macos.dmg"
   name "Gupi"
