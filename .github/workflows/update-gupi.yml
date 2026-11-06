@@ -81,6 +81,7 @@ jobs:
           brew tap suxiaoshao/tap "$GITHUB_WORKSPACE"
           mkdir -p "$(brew --repository suxiaoshao/tap)/Casks/g"
           cp Casks/g/gupi.rb "$(brew --repository suxiaoshao/tap)/Casks/g/gupi.rb"
+          brew trust --cask suxiaoshao/tap/gupi
           brew style --cask suxiaoshao/tap/gupi
           brew audit --cask --online suxiaoshao/tap/gupi
       - name: Open or reuse an update PR
