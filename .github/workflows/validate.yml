@@ -27,5 +27,6 @@ jobs:
           brew update
           brew --version
           brew tap suxiaoshao/tap "$GITHUB_WORKSPACE"
+          brew trust --cask suxiaoshao/tap/gupi
           brew style --cask suxiaoshao/tap/gupi
           brew audit --cask --online suxiaoshao/tap/gupi
